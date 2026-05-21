@@ -29,3 +29,31 @@ const client = new MongoClient(uri, {
   },
 });
 
+
+const JWKS = createRemoteJWKSet(new URL(`${CLIENT_URL}/api/auth/jwks`));
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const cookieToken = req.cookies?.token;
+  const token = authHeader?.startsWith("Bearer ")
+    ? authHeader.split(" ")[1]
+    : cookieToken;
+
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+    try {
+    const { payload } = await jwtVerify(token, JWKS);
+    req.user = {
+      id: payload.sub || payload.id,
+      email: payload.email,
+      name: payload.name || payload.email?.split("@")[0],
+    };
+    if (!req.user.email) {
+      return res.status(403).json({ message: "Invalid token payload" });
+    }
+    next();
+  } catch {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+};
