@@ -151,3 +151,40 @@ async function run() {
       res.status(500).json({ message: err.message });
     }
   });
+  
+
+  app.post("/pets", verifyToken, async (req, res) => {
+    try {
+      const petData = {
+        ...req.body,
+        ownerEmail: req.user.email,
+        status: "available",
+        createdAt: new Date(),
+      };
+      const result = await petsCollection.insertOne(petData);
+      res.status(201).json({ insertedId: result.insertedId });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/pets/:id", verifyToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const pet = await petsCollection.findOne({ _id: new ObjectId(id) });
+      if (!pet) return res.status(404).json({ message: "Pet not found" });
+      if (pet.ownerEmail !== req.user.email) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      const { ownerEmail, status, ...updates } = req.body;
+      await petsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updates }
+      );
+      res.json({ message: "Pet updated" });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  
