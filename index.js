@@ -29,7 +29,6 @@ const client = new MongoClient(uri, {
   },
 });
 
-
 const JWKS = createRemoteJWKSet(new URL(`${CLIENT_URL}/api/auth/jwks`));
 
 const verifyToken = async (req, res, next) => {
@@ -42,7 +41,8 @@ const verifyToken = async (req, res, next) => {
   if (!token) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-    try {
+
+  try {
     const { payload } = await jwtVerify(token, JWKS);
     req.user = {
       id: payload.sub || payload.id,
@@ -58,6 +58,11 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
+async function run() {
+  await client.connect();
+  const db = client.db("petPaws");
+  const petsCollection = db.collection("pets");
+  const requestsCollection = db.collection("requests");
 
   const count = await petsCollection.countDocuments();
 
@@ -78,17 +83,6 @@ const verifyToken = async (req, res, next) => {
       res.status(500).json({ message: err.message });
     }
   });
-
-  
-
-
-
-async function run() {
-  await client.connect();
-  const db = client.db("petPaws");
-  const petsCollection = db.collection("pets");
-  const requestsCollection = db.collection("requests");
-
 
   app.get("/pets", async (req, res) => {
     try {
@@ -123,9 +117,6 @@ async function run() {
     }
   });
 
-  
-
-
   app.get("/pets/owner/listings", verifyToken, async (req, res) => {
     try {
       const result = await petsCollection
@@ -151,7 +142,6 @@ async function run() {
       res.status(500).json({ message: err.message });
     }
   });
-  
 
   app.post("/pets", verifyToken, async (req, res) => {
     try {
@@ -187,8 +177,6 @@ async function run() {
     }
   });
 
-  
-
   app.delete("/pets/:id", verifyToken, async (req, res) => {
     try {
       const { id } = req.params;
@@ -204,9 +192,6 @@ async function run() {
       res.status(500).json({ message: err.message });
     }
   });
-
-  
-
 
   app.post("/requests", verifyToken, async (req, res) => {
     try {
@@ -249,3 +234,126 @@ async function run() {
       res.status(500).json({ message: err.message });
     }
   });
+
+  app.get("/requests/me", verifyToken, async (req, res) => {
+    try {
+      const result = await requestsCollection
+        .find({ userEmail: req.user.email })
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/requests/pet/:petId", verifyToken, async (req, res) => {
+    try {
+      const { petId } = req.params;
+      const pet = await petsCollection.findOne({ _id: new ObjectId(petId) });
+      if (!pet) return res.status(404).json({ message: "Pet not found" });
+      if (pet.ownerEmail !== req.user.email) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      const result = await requestsCollection
+        .find({ petId })
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/requests/:id/approve", verifyToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const request = await requestsCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      if (!request) return res.status(404).json({ message: "Request not found" });
+
+      const pet = await petsCollection.findOne({
+        _id: new ObjectId(request.petId),
+      });
+      if (!pet) return res.status(404).json({ message: "Pet not found" });
+      if (pet.ownerEmail !== req.user.email) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      if (pet.status === "adopted") {
+        return res.status(400).json({ message: "Pet already adopted" });
+      }
+
+      await requestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status: "approved" } }
+      );
+      await requestsCollection.updateMany(
+        {
+          petId: request.petId,
+          _id: { $ne: new ObjectId(id) },
+          status: "pending",
+        },
+        { $set: { status: "rejected" } }
+      );
+      await petsCollection.updateOne(
+        { _id: new ObjectId(request.petId) },
+        { $set: { status: "adopted" } }
+      );
+
+      res.json({ message: "Request approved" });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/requests/:id/reject", verifyToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const request = await requestsCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      if (!request) return res.status(404).json({ message: "Request not found" });
+
+      const pet = await petsCollection.findOne({
+        _id: new ObjectId(request.petId),
+      });
+      if (!pet || pet.ownerEmail !== req.user.email) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      await requestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status: "rejected" } }
+      );
+      res.json({ message: "Request rejected" });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/requests/:id", verifyToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const request = await requestsCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      if (!request) return res.status(404).json({ message: "Request not found" });
+      if (request.userEmail !== req.user.email) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      await requestsCollection.deleteOne({ _id: new ObjectId(id) });
+      res.json({ message: "Request cancelled" });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  console.log("Connected to MongoDB");
+}
+
+run().catch(console.error);
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
