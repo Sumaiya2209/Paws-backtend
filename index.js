@@ -204,3 +204,48 @@ async function run() {
       res.status(500).json({ message: err.message });
     }
   });
+
+  
+
+
+  app.post("/requests", verifyToken, async (req, res) => {
+    try {
+      const { petId, pickupDate, message } = req.body;
+      const pet = await petsCollection.findOne({ _id: new ObjectId(petId) });
+      if (!pet) return res.status(404).json({ message: "Pet not found" });
+      if (pet.ownerEmail === req.user.email) {
+        return res
+          .status(400)
+          .json({ message: "You cannot adopt your own pet" });
+      }
+      if (pet.status === "adopted") {
+        return res.status(400).json({ message: "Pet is already adopted" });
+      }
+
+      const existing = await requestsCollection.findOne({
+        petId,
+        userEmail: req.user.email,
+        status: { $in: ["pending", "approved"] },
+      });
+      if (existing) {
+        return res
+          .status(400)
+          .json({ message: "You already have a request for this pet" });
+      }
+
+      const requestDoc = {
+        petId,
+        petName: pet.name,
+        userName: req.user.name,
+        userEmail: req.user.email,
+        pickupDate,
+        message,
+        status: "pending",
+        createdAt: new Date(),
+      };
+      const result = await requestsCollection.insertOne(requestDoc);
+      res.status(201).json({ insertedId: result.insertedId });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
