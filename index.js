@@ -122,3 +122,32 @@ async function run() {
       res.status(500).json({ message: err.message });
     }
   });
+
+  
+
+
+  app.get("/pets/owner/listings", verifyToken, async (req, res) => {
+    try {
+      const result = await petsCollection
+        .find({ ownerEmail: req.user.email })
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/pets/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid pet id" });
+      }
+      const pet = await petsCollection.findOne({ _id: new ObjectId(id) });
+      if (!pet) return res.status(404).json({ message: "Pet not found" });
+      res.json(pet);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
