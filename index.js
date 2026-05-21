@@ -78,3 +78,47 @@ const verifyToken = async (req, res, next) => {
       res.status(500).json({ message: err.message });
     }
   });
+
+  
+
+
+
+async function run() {
+  await client.connect();
+  const db = client.db("petPaws");
+  const petsCollection = db.collection("pets");
+  const requestsCollection = db.collection("requests");
+
+
+  app.get("/pets", async (req, res) => {
+    try {
+      const { name, species, sort } = req.query;
+      const filter = { status: "available" };
+
+      if (name) {
+        filter.name = { $regex: name, $options: "i" };
+      }
+
+      if (species) {
+        const list = species.split(",").map((s) => s.trim());
+        filter.species = { $in: list };
+      }
+
+      let cursor = petsCollection.find(filter);
+
+      if (sort === "fee-asc") {
+        cursor = cursor.sort({ adoptionFee: 1 });
+      } else if (sort === "fee-desc") {
+        cursor = cursor.sort({ adoptionFee: -1 });
+      } else if (sort === "name") {
+        cursor = cursor.sort({ name: 1 });
+      } else {
+        cursor = cursor.sort({ createdAt: -1 });
+      }
+
+      const result = await cursor.toArray();
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
