@@ -57,3 +57,24 @@ const verifyToken = async (req, res, next) => {
     return res.status(403).json({ message: "Forbidden" });
   }
 };
+
+
+  const count = await petsCollection.countDocuments();
+
+
+  app.get("/", (req, res) => {
+    res.send("Pet Adoption API is running");
+  });
+
+  app.get("/pets/featured", async (req, res) => {
+    try {
+      const result = await petsCollection
+        .find({ status: "available" })
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .toArray();
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
