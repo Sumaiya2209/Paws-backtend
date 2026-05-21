@@ -188,3 +188,19 @@ async function run() {
   });
 
   
+
+  app.delete("/pets/:id", verifyToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const pet = await petsCollection.findOne({ _id: new ObjectId(id) });
+      if (!pet) return res.status(404).json({ message: "Pet not found" });
+      if (pet.ownerEmail !== req.user.email) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      await petsCollection.deleteOne({ _id: new ObjectId(id) });
+      await requestsCollection.deleteMany({ petId: id });
+      res.json({ message: "Pet deleted" });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
