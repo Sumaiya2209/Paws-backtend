@@ -14,7 +14,10 @@ const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 const app = express();
 app.use(
   cors({
-    origin: CLIENT_URL,
+    origin:[
+       "http://localhost:3000",
+       "https://paws-frontend-three.vercel.app"
+    ],
     credentials: true,
   })
 );
@@ -59,7 +62,7 @@ const verifyToken = async (req, res, next) => {
 };
 
 async function run() {
-  await client.connect();
+  //await client.connect();
   const db = client.db("petPaws");
   const petsCollection = db.collection("pets");
   const requestsCollection = db.collection("requests");
